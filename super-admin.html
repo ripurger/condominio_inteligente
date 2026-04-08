@@ -1,0 +1,116 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Super Admin — Condomínio Inteligente</title>
+  <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+
+  <nav class="navbar">
+    <span class="navbar-brand">Condomínio Inteligente</span>
+    <div style="display:flex;align-items:center;gap:16px;">
+      <span id="user-nome" style="font-size:14px;color:#666"></span>
+      <button class="btn btn-ghost" id="btn-logout">Sair</button>
+    </div>
+  </nav>
+
+  <div class="container" style="padding-top:32px;">
+
+    <div style="margin-bottom:28px;">
+      <h2 style="font-size:20px;font-weight:600;">Administradoras</h2>
+      <p style="color:#666;font-size:14px;margin-top:4px;">Gerencie o acesso das administradoras ao sistema</p>
+    </div>
+
+    <div class="card">
+      <div id="alert" class="alert" style="display:none"></div>
+      <table>
+        <thead>
+          <tr>
+            <th>Empresa</th>
+            <th>E-mail</th>
+            <th>Cadastro</th>
+            <th>Status</th>
+            <th>Ações</th>
+          </tr>
+        </thead>
+        <tbody id="tabela-admins">
+          <tr><td colspan="5" style="color:#999;text-align:center;padding:32px">Carregando...</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+  </div>
+
+  <script type="module">
+    import { requireRole, logout } from './js/auth.js'
+    import { supabase } from './js/supabase.js'
+
+    const user = await requireRole('super_admin')
+    if (!user) return
+
+    document.getElementById('user-nome').textContent = user.profile.nome || user.email
+    document.getElementById('btn-logout').addEventListener('click', logout)
+
+    async function carregarAdmins() {
+      const { data, error } = await supabase
+        .from('administradoras')
+        .select(`
+          id,
+          nome_empresa,
+          status,
+          created_at,
+          profiles ( email )
+        `)
+        .order('created_at', { ascending: false })
+
+      const tbody = document.getElementById('tabela-admins')
+
+      if (error || !data.length) {
+        tbody.innerHTML = `<tr><td colspan="5" style="color:#999;text-align:center;padding:32px">Nenhuma administradora cadastrada ainda.</td></tr>`
+        return
+      }
+
+      tbody.innerHTML = data.map(a => `
+        <tr>
+          <td style="font-weight:500">${a.nome_empresa}</td>
+          <td style="color:#666">${a.profiles.email}</td>
+          <td style="color:#666">${new Date(a.created_at).toLocaleDateString('pt-BR')}</td>
+          <td><span class="badge badge-${a.status}">${a.status}</span></td>
+          <td>
+            <div style="display:flex;gap:8px;">
+              ${a.status !== 'ativo' ? `<button class="btn btn-ghost" style="padding:6px 14px;font-size:13px;" onclick="alterarStatus('${a.id}', 'ativo')">Aprovar</button>` : ''}
+              ${a.status !== 'bloqueado' ? `<button class="btn btn-danger" style="padding:6px 14px;font-size:13px;" onclick="alterarStatus('${a.id}', 'bloqueado')">Bloquear</button>` : ''}
+            </div>
+          </td>
+        </tr>
+      `).join('')
+    }
+
+    window.alterarStatus = async function(id, status) {
+      const alert = document.getElementById('alert')
+      const { error } = await supabase
+        .from('administradoras')
+        .update({ status })
+        .eq('id', id)
+
+      if (error) {
+        alert.textContent = 'Erro ao atualizar status.'
+        alert.className = 'alert alert-error'
+        alert.style.display = 'block'
+        return
+      }
+
+      alert.textContent = `Status atualizado para "${status}" com sucesso.`
+      alert.className = 'alert alert-success'
+      alert.style.display = 'block'
+      setTimeout(() => alert.style.display = 'none', 3000)
+      carregarAdmins()
+    }
+
+    carregarAdmins()
+  </script>
+
+</body>
+</html>
